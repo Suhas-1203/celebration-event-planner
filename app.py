@@ -3,10 +3,6 @@
 from datetime import date, timedelta
 
 import streamlit as st
-from dotenv import load_dotenv
-
-# Load environment variables (Gemini API key)
-load_dotenv()
 
 from planner.budget import allocate_budget, per_guest_cost
 from planner.llm import generate_ideas
