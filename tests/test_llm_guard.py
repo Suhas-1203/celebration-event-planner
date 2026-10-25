@@ -1,7 +1,8 @@
-"""Tests for the LLM injection guard and deterministic fallback."""
+"""Tests for the LLM injection guard, API paths, and deterministic fallback."""
 
 from datetime import date, timedelta
-
+from unittest.mock import MagicMock, patch
+import sys
 import pytest
 
 from planner.llm import _fallback_ideas, generate_ideas, sanitize
@@ -65,3 +66,73 @@ def test_generate_ideas_without_key_uses_fallback(monkeypatch, et):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     ideas = generate_ideas(_req(et), {"venue": 10000.0})
     assert len(ideas) == 5
+
+
+# --- NEW TESTS FOR API PATHS (MOCKED) ---
+
+@patch("google.generativeai.GenerativeModel")
+@patch("planner.llm._get_model")
+def test_generate_ideas_api_success(mock_get_model, mock_gen_model):
+    # Setup the mock response
+    mock_model_instance = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text = "- Idea 1\n- Idea 2\n- Idea 3\n- Idea 4\n- Idea 5"
+    mock_model_instance.generate_content.return_value = mock_response
+    mock_get_model.return_value = mock_model_instance
+
+    # Call the function
+    ideas = generate_ideas(_req(), {"venue": 10000.0})
+
+    # Assertions
+    assert len(ideas) == 5
+    assert ideas[0] == "Idea 1"
+    assert "Idea 5" in ideas
+    mock_model_instance.generate_content.assert_called_once()
+
+
+@patch("planner.llm._get_model")
+def test_generate_ideas_api_failure_falls_back(mock_get_model):
+    # Force the model to throw an exception to test the except block
+    mock_model_instance = MagicMock()
+    mock_model_instance.generate_content.side_effect = Exception("API Timeout")
+    mock_get_model.return_value = mock_model_instance
+
+    # Call the function
+    ideas = generate_ideas(_req(), {"venue": 10000.0})
+
+    # Should return the 5 fallback ideas instead of crashing
+    assert len(ideas) == 5
+    assert "Personalized welcome sign with the couple's story" in ideas[0]
+
+
+@patch("planner.llm._get_model")
+def test_generate_ideas_api_empty_response_falls_back(mock_get_model):
+    # Test the case where the LLM returns blank text
+    mock_model_instance = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text = ""
+    mock_model_instance.generate_content.return_value = mock_response
+    mock_get_model.return_value = mock_model_instance
+
+    ideas = generate_ideas(_req(), {"venue": 10000.0})
+    
+    # Should return the 5 fallback ideas
+    assert len(ideas) == 5
+    assert "Personalized welcome sign with the couple's story" in ideas[0]
+
+@patch("planner.llm.os.getenv")
+@patch("google.generativeai.configure")
+def test_get_model_success(mock_configure, mock_getenv):
+    mock_getenv.return_value = "fake_key"
+    from planner.llm import _get_model
+    model = _get_model()
+    assert model is not None
+    mock_configure.assert_called_once_with(api_key="fake_key")
+
+@patch("planner.llm.os.getenv")
+@patch.dict(sys.modules, {"google.generativeai": None})
+def test_get_model_import_error(mock_getenv):
+    mock_getenv.return_value = "fake_key"
+    from planner.llm import _get_model
+    model = _get_model()
+    assert model is None

@@ -12,13 +12,35 @@ from planner.vendors import build_checklist, checklist_progress
 
 st.set_page_config(page_title="Celebration & Event Planner", page_icon="🎉", layout="wide")
 
+# --- ACCESSIBILITY: Explicit high-contrast CSS for keyboard nav & screen readers ---
+# --- ACCESSIBILITY: Explicit high-contrast CSS for keyboard nav & screen readers ---
+st.markdown(
+    """
+    <style>
+    /* Ensure high contrast for text */
+    .stApp { color: #FAFAFA; }
+    
+    /* Fix the dull checkbox labels */
+    .stCheckbox label p { 
+        color: #FAFAFA !important; 
+        font-size: 1.05rem !important; 
+    }
+    
+    /* Add focus outlines for keyboard navigation */
+    .stTextInput input:focus, .stSelectbox select:focus { 
+        border: 2px solid #FF4B4B !important; 
+        outline: 2px solid #FF4B4B !important;
+    }
+    </style>
+    """, 
+    unsafe_allow_html=True
+)
 st.title("🎉 Celebration & Event Planner")
 st.caption(
     "Plan weddings, birthdays, and community events with a budget breakdown, "
     "timeline, vendor checklist, and personalised ideas."
 )
 
-# Initialize session state for the plan
 if "plan_data" not in st.session_state:
     st.session_state.plan_data = None
 
@@ -35,16 +57,26 @@ with st.form("intake"):
             help="Must be a future date.",
         )
     with col2:
-        guests = st.number_input("Guest count", min_value=1, max_value=5000, value=100, step=10)
+        guests = st.number_input(
+            "Guest count", min_value=1, max_value=5000, value=100, step=10,
+            help="Enter the expected number of attendees."
+        )
         budget_amt = st.number_input(
             "Total budget", min_value=1000.0, max_value=10_000_000.0,
             value=200000.0, step=5000.0,
+            help="Enter your total available budget."
         )
 
-    vibe = st.text_input("Vibe / style (optional)", max_chars=200,
-                         placeholder="e.g. Rustic outdoor garden party")
-    dietary = st.text_input("Dietary constraints (optional)", max_chars=200,
-                            placeholder="e.g. Vegetarian, nut-free")
+    vibe = st.text_input(
+        "Vibe / style (optional)", max_chars=200,
+        placeholder="e.g. Rustic outdoor garden party",
+        help="Describe the aesthetic or theme."
+    )
+    dietary = st.text_input(
+        "Dietary constraints (optional)", max_chars=200,
+        placeholder="e.g. Vegetarian, nut-free",
+        help="List any food allergies or preferences."
+    )
     submitted = st.form_submit_button("Generate plan", use_container_width=True)
 
 if submitted:
@@ -57,20 +89,22 @@ if submitted:
             vibe=vibe,
             dietary=dietary,
         )
-        # Generate and save to session state
+        
+        # EFFICIENCY FIX: Calculate budget exactly once and reuse it
+        budget_dict = allocate_budget(req)
+        
         st.session_state.plan_data = {
             "request": req,
-            "budget": allocate_budget(req),
+            "budget": budget_dict,
             "timeline": generate_timeline(req),
             "checklist": build_checklist(req),
-            "ideas": generate_ideas(req, allocate_budget(req)),
+            "ideas": generate_ideas(req, budget_dict), # Reuse the dict!
         }
     except Exception as exc:
         st.error(f"Invalid input: {exc}")
         st.session_state.plan_data = None
         st.stop()
 
-# Only display if plan data exists in memory
 if st.session_state.plan_data:
     data = st.session_state.plan_data
     req = data["request"]
@@ -93,18 +127,15 @@ if st.session_state.plan_data:
     st.header("✅ Vendor checklist")
     checklist = data["checklist"]
     
-    # We use columns to layout the checklist nicely
     for cat, items in checklist.items():
         st.subheader(cat.title())
         for it in items:
             key = f"chk-{req.event_type.value}-{cat}-{it['item']}"
-            # If the widget key is true, update the underlying dict
             if st.checkbox(it["item"], key=key, value=(it["status"] == "done")):
                 it["status"] = "done"
             else:
                 it["status"] = "todo"
                 
-    # Update progress
     progress = checklist_progress(checklist)
     st.progress(progress["overall_pct"] / 100)
     st.caption(f"Overall progress: {progress['overall_pct']}%")
