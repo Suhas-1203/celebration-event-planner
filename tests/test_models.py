@@ -24,3 +24,7 @@ def test_currency_uppercased():
 def test_control_chars_stripped():
     r = _req(vibe="hello\x00world")
     assert "\x00" not in r.vibe
+
+def test_control_chars_stripped():
+    r = _req(vibe="hello\x00world")
+    assert "\x00" not in r.vibe

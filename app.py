@@ -9,43 +9,45 @@ from planner.llm import generate_ideas
 from planner.models import EventRequest, EventType
 from planner.timeline import generate_timeline
 from planner.vendors import build_checklist, checklist_progress
+from planner.export import generate_markdown_export
 
 st.set_page_config(page_title="Celebration & Event Planner", page_icon="🎉", layout="wide")
 
-# --- ACCESSIBILITY: Explicit high-contrast CSS for keyboard nav & screen readers ---
-# --- ACCESSIBILITY: Explicit high-contrast CSS for keyboard nav & screen readers ---
+# --- ACCESSIBILITY: High contrast & Keyboard Focus ---
 st.markdown(
     """
     <style>
-    /* Ensure high contrast for text */
+    /* High contrast text */
     .stApp { color: #FAFAFA; }
     
-    /* Fix the dull checkbox labels */
+    /* Fix dull checkbox labels */
     .stCheckbox label p { 
         color: #FAFAFA !important; 
         font-size: 1.05rem !important; 
     }
     
-    /* Add focus outlines for keyboard navigation */
-    .stTextInput input:focus, .stSelectbox select:focus { 
-        border: 2px solid #FF4B4B !important; 
-        outline: 2px solid #FF4B4B !important;
+    /* Highly visible focus outlines for keyboard navigation */
+    button:focus, input:focus, select:focus, textarea:focus {
+        outline: 3px solid #FF4B4B !important;
+        outline-offset: 2px !important;
     }
     </style>
     """, 
     unsafe_allow_html=True
 )
+
+# Open the main semantic landmark
+st.markdown('<main aria-label="Event Planner Main Content">', unsafe_allow_html=True)
+
 st.title("🎉 Celebration & Event Planner")
-st.caption(
-    "Plan weddings, birthdays, and community events with a budget breakdown, "
-    "timeline, vendor checklist, and personalised ideas."
-)
+st.caption("Plan weddings, birthdays, and community events with a budget breakdown, timeline, vendor checklist, and personalised ideas.")
 
 if "plan_data" not in st.session_state:
     st.session_state.plan_data = None
 
 with st.form("intake"):
-    st.subheader("Event details")
+    st.header("Event details", help="Enter your event parameters below.")
+    
     col1, col2 = st.columns(2)
     with col1:
         et_label = st.selectbox(
@@ -90,7 +92,7 @@ if submitted:
             dietary=dietary,
         )
         
-        # EFFICIENCY FIX: Calculate budget exactly once and reuse it
+        # EFFICIENCY: Calculate once
         budget_dict = allocate_budget(req)
         
         st.session_state.plan_data = {
@@ -98,7 +100,7 @@ if submitted:
             "budget": budget_dict,
             "timeline": generate_timeline(req),
             "checklist": build_checklist(req),
-            "ideas": generate_ideas(req, budget_dict), # Reuse the dict!
+            "ideas": generate_ideas(req, budget_dict),
         }
     except Exception as exc:
         st.error(f"Invalid input: {exc}")
@@ -112,19 +114,16 @@ if st.session_state.plan_data:
     st.divider()
 
     # ---------- Budget ----------
-    st.header("💰 Budget breakdown")
+    st.header("💰 Budget breakdown", help="Allocation of your total budget based on event type.")
     st.metric("Per-guest cost", f"{req.currency} {per_guest_cost(req):,.2f}")
-    st.table(
-        [{"Category": k.title(), "Amount": f"{req.currency} {v:,.2f}"}
-         for k, v in data["budget"].items()]
-    )
+    st.table([{"Category": k.title(), "Amount": f"{req.currency} {v:,.2f}"} for k, v in data["budget"].items()])
 
     # ---------- Timeline ----------
-    st.header("🗓 Timeline")
+    st.header("🗓 Timeline", help="Reverse-scheduled tasks leading up to your event.")
     st.table(data["timeline"])
 
     # ---------- Checklist ----------
-    st.header("✅ Vendor checklist")
+    st.header("✅ Vendor checklist", help="Track your progress on essential vendor tasks.")
     checklist = data["checklist"]
     
     for cat, items in checklist.items():
@@ -141,26 +140,14 @@ if st.session_state.plan_data:
     st.caption(f"Overall progress: {progress['overall_pct']}%")
 
     # ---------- Ideas ----------
-    st.header("💡 Personalised ideas")
+    st.header("💡 Personalised ideas", help="AI-generated creative suggestions.")
     for idea in data["ideas"]:
         st.write(f"- {idea}")
 
     # ---------- Export ----------
     st.divider()
-    export = (
-        f"# Event Plan — {req.event_type.value.title()}\n"
-        f"Date: {req.event_date}\nGuests: {req.guest_count}\n"
-        f"Budget: {req.currency} {req.total_budget:,.2f}\n\n"
-        f"## Budget\n" + "\n".join(f"- {k}: {v}" for k, v in data["budget"].items())
-        + "\n\n## Timeline\n"
-        + "\n".join(f"- {t['due']}: {t['task']}" for t in data["timeline"])
-        + "\n\n## Checklist\n"
-        + "\n".join(
-            f"- [{it['status']}] {cat}: {it['item']}"
-            for cat, items in checklist.items() for it in items
-        )
-        + "\n\n## Ideas\n"
-        + "\n".join(f"- {i}" for i in data["ideas"])
-    )
-    st.download_button("Download plan (Markdown)", export,
-                       file_name="event-plan.md", mime="text/markdown")
+    export_md = generate_markdown_export(req, data["budget"], data["timeline"], checklist, data["ideas"])
+    st.download_button("Download plan (Markdown)", export_md, file_name="event-plan.md", mime="text/markdown")
+
+# Close the main semantic landmark
+st.markdown('</main>', unsafe_allow_html=True)

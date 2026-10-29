@@ -41,3 +41,42 @@ def test_per_guest_cost():
 
 def test_per_guest_cost_rounding():
     assert per_guest_cost(_req(budget=100, guests=3)) == 33.33
+
+def test_budget_allocation_error():
+    from planner.budget import ALLOCATIONS, validate_allocations
+    # Temporarily break the allocation to trigger the error
+    ALLOCATIONS[EventType.WEDDING]["venue"] = 0.99
+    with pytest.raises(AssertionError):
+        validate_allocations()
+    # Fix it back
+    ALLOCATIONS[EventType.WEDDING]["venue"] = 0.25
+
+def test_rounding_drift():
+    # A budget that causes rounding drift with the percentages
+    r = _req(budget=100.01, et=EventType.BIRTHDAY)
+    b = allocate_budget(r)
+    assert abs(sum(b.values()) - r.total_budget) < 0.01
+
+def test_budget_allocation_error():
+    from planner.budget import ALLOCATIONS, validate_allocations
+    ALLOCATIONS[EventType.WEDDING]["venue"] = 0.99
+    with pytest.raises(AssertionError):
+        validate_allocations()
+    ALLOCATIONS[EventType.WEDDING]["venue"] = 0.25
+
+def test_rounding_drift():
+    r = _req(budget=100.01, et=EventType.BIRTHDAY)
+    b = allocate_budget(r)
+    assert abs(sum(b.values()) - r.total_budget) < 0.01
+
+def test_budget_allocation_error():
+    from planner.budget import ALLOCATIONS, validate_allocations
+    ALLOCATIONS[EventType.WEDDING]["venue"] = 0.99
+    with pytest.raises(AssertionError):
+        validate_allocations()
+    ALLOCATIONS[EventType.WEDDING]["venue"] = 0.25
+
+def test_rounding_drift():
+    r = _req(budget=100.01, et=EventType.BIRTHDAY)
+    b = allocate_budget(r)
+    assert abs(sum(b.values()) - r.total_budget) < 0.01    
